@@ -6,7 +6,7 @@ class TranscriptBuffer:
     def __init__(self):
         self.buffer = ""
         self.last_activity_time = time.time()
-        self.silence_threshold = 2.0  # seconds of silence before processing
+        self.silence_threshold = 3.0  # seconds of silence before processing
         self.processed_sentences = set()  # Track processed sentences to avoid duplicates
     
     def add_transcript(self, transcript, is_final=False):
@@ -46,17 +46,17 @@ class TranscriptBuffer:
         
         # Strong indicators of a complete sentence
         if self.buffer.strip().endswith(('.', '?', '!', '。', '？', '！')):
-            return is_final and len(buffer_words) >= 3
+            return is_final and len(buffer_words) >= 2
         
         # For sentences without punctuation, be more conservative
         if is_final:
             # Check for incomplete patterns
-            incomplete_endings = ['my', 'the', 'a', 'an', 'to', 'for', 'with', 'and', 'or', 'i', 'want', 'need']
+            incomplete_endings = ['my', 'the', 'a', 'an', 'to', 'for', 'with', 'and', 'or', 'i', 'want', 'need','is','id is','because']
             last_word = self.buffer.strip().lower().split()[-1] if buffer_words else ""
             
             # More conservative: require longer sentences and avoid obvious incomplete endings
-            if (len(buffer_words) >= 6 and 
-                buffer_length >= 30 and 
+            if (len(buffer_words) >= 3 and 
+                buffer_length >= 15 and 
                 last_word not in incomplete_endings):
                 return True
         

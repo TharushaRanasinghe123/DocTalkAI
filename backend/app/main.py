@@ -138,6 +138,8 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from app.services import handle_websocket_connection
+from app.services.mongodb_service import mongodb_service
+from app.routes import appointments
 
 # For debugging WebSocket connections
 from starlette.websockets import WebSocketState
@@ -207,6 +209,31 @@ async def websocket_transcribe(websocket: WebSocket):
         # Log final state
         print(f"WebSocket connection ended. Client state: {websocket.client_state}")
 
+@app.on_event("startup")
+async def startup_event():
+    """Connect to MongoDB on application startup"""
+    success = await mongodb_service.connect()
+    if success:
+        print("🎯 MongoDB connection established during startup")
+    else:
+        print("⚠️ MongoDB connection failed during startup")
+
+@app.get("/test-db")
+async def test_db_connection():
+    """Test endpoint to check MongoDB connection"""
+    if mongodb_service.client:
+        return {
+            "status": "connected", 
+            "database": "doctalk_db",
+            "message": "MongoDB Atlas connection is working!"
+        }
+    else:
+        return {
+            "status": "disconnected", 
+            "error": "MongoDB not connected. Check your connection string."
+        }
+
+app.include_router(appointments.router, prefix="/api/v1", tags=["appointments"])
 
 
 if __name__ == "__main__":

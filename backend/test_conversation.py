@@ -3,62 +3,60 @@ import asyncio
 import sys
 import os
 
-# Add the backend directory to the Python path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'backend'))
+# Add the app directory to the Python path so we can import our modules
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '.'))
 
 from app.services.conversation_service import conversation_service
-from app.models.conversation import ConversationState
 from app.models.intent_model import IntentResponse, IntentType
 
 async def test_conversation_flow():
-    print("🧪 Testing Conversation Logic...\n")
+    """Test the multi-turn conversation logic"""
+    print("🧪 Testing Conversation Service...\n")
     
-    # Initialize a fresh conversation state
-    current_state = ConversationState()
+    # Simulate a unique session (like a WebSocket connection ID)
+    test_session_id = "test_session_123"
     
-    # Test Scenario 1: User wants to cancel but doesn't provide enough info
-    print("1. User says: 'I want to cancel my appointment'")
+    # TEST 1: User starts a booking but only provides their name
+    print("1. User says: 'Hi, my name is Tausha and I want to book an appointment.'")
     intent_response_1 = IntentResponse(
-        intent=IntentType.CANCEL_APPOINTMENT,
-        entities={},  # Empty - no details provided
+        intent=IntentType.BOOK_APPOINTMENT,
+        entities={"patient_name": "Tausha"},  # Only name provided
         confidence=0.95,
-        raw_transcript="I want to cancel my appointment",
+        raw_transcript="Hi my name is Tausha and I want to book an appointment",
         processed_response=""
     )
     
-    response_1, new_state_1 = await conversation_service.process_intent(intent_response_1, current_state)
-    print(f"   AI should ask for missing info: {response_1}")
-    print(f"   Conversation state updated: {new_state_1.dict()}\n")
+    result_1, should_speak_1 = await conversation_service.process_intent(intent_response_1, test_session_id)
+    print(f"   AI should ask for: '{result_1}'")
+    print(f"   Should speak: {should_speak_1}\n")
     
-    # Test Scenario 2: User provides their name
-    print("2. User says: 'My name is John Doe'")
+    # TEST 2: User responds with the doctor's name
+    print("2. User says: 'Dr. Kavin'")
     intent_response_2 = IntentResponse(
-        intent=IntentType.CANCEL_APPOINTMENT,  # Same intent!
-        entities={"patient_name": "John Doe"}, # GPT might extract this
-        confidence=0.95,
-        raw_transcript="My name is John Doe",
+        intent=IntentType.BOOK_APPOINTMENT,  # Same intent!
+        entities={},  # No entities extracted from just "Dr. Kavin"
+        confidence=0.3,  # Low confidence because it's not a full sentence
+        raw_transcript="Dr. Kavin",  # This is the key - the raw answer
         processed_response=""
     )
     
-    response_2, new_state_2 = await conversation_service.process_intent(intent_response_2, new_state_1)
-    print(f"   AI should ask for next missing info: {response_2}")
-    print(f"   Conversation state updated: {new_state_2.dict()}\n")
+    result_2, should_speak_2 = await conversation_service.process_intent(intent_response_2, test_session_id)
+    print(f"   AI should ask for: '{result_2}'")
+    print(f"   Should speak: {should_speak_2}\n")
     
-    # Test Scenario 3: User provides the date
-    print("3. User says: 'It's for this Friday'")
+    # TEST 3: User provides the date
+    print("3. User says: 'Tomorrow at 4 PM'")
     intent_response_3 = IntentResponse(
-        intent=IntentType.CANCEL_APPOINTMENT,
-        entities={"date": "2024-01-26"}, # Assuming GPT extracts the date
+        intent=IntentType.BOOK_APPOINTMENT,
+        entities={"date": "2024-01-15", "time": "16:00"},  # OpenAI extracts this
         confidence=0.95,
-        raw_transcript="It's for this Friday",
+        raw_transcript="Tomorrow at 4 PM",
         processed_response=""
     )
     
-    response_3, new_state_3 = await conversation_service.process_intent(intent_response_3, new_state_2)
-    print(f"   AI should confirm action: {response_3}")
-    print(f"   Conversation state should be reset: {new_state_3.dict()}\n")
-    
-    print("✅ Conversation flow test completed!")
+    result_3, should_speak_3 = await conversation_service.process_intent(intent_response_3, test_session_id)
+    print(f"   AI should confirm: '{result_3}'")
+    print(f"   Should speak: {should_speak_3}\n")
 
 if __name__ == "__main__":
     asyncio.run(test_conversation_flow())

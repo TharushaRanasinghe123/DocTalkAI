@@ -7,6 +7,7 @@ class IntentType(str, Enum):
     BOOK_APPOINTMENT = "book_appointment"
     RESCHEDULE_APPOINTMENT = "reschedule_appointment"
     CANCEL_APPOINTMENT = "cancel_appointment"
+    QUERY_APPOINTMENT = "query_appointment"
     QUERY_AVAILABILITY = "query_availability"
     GREETING = "greeting"
     THANKS = "thanks"

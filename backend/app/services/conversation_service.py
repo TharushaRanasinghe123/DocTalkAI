@@ -1,119 +1,127 @@
-# backend/app/services/conversation_service.py
-from typing import Dict, List, Tuple
-from app.models.conversation import ConversationState
-from app.models.intent_model import IntentType, IntentResponse
-from app.services.openai_service import openai_service  # Import to access REQUIREMENTS_MAP
+# app/services/conversation_service.py
+from typing import Tuple
+from app.models.conversation_state import ConversationState
+from app.models.intent_model import IntentResponse, IntentType
+from app.services.openai_service import openai_service # Import the REQUIREMENTS_MAP
 
 class ConversationService:
-    
-    async def process_intent(self, intent_response: IntentResponse, current_state: ConversationState) -> Tuple[str, ConversationState]:
+    # This will store active conversations in memory (for now)
+    def __init__(self):
+        self.active_conversations: Dict[str, ConversationState] = {}
+
+    async def process_intent(self, intent_response: IntentResponse, session_id: str) -> Tuple[str, bool]:
         """
-        The CORE LOGIC: Checks if we have enough info to act, or if we need to ask the user for more.
-        Returns: (response_text: str, updated_state: ConversationState)
+        The CORE LOGIC.
+        Takes the user's intent and the current session, and decides what to do next.
+        Returns: (response_text, should_speak)
         """
-        # Get the list of valid entity combinations for this intent
-        valid_combinations = openai_service.REQUIREMENTS_MAP.get(intent_response.intent, [])
+            # 0. Handle the case where this is an answer to a previous question
+        current_state = self.active_conversations.get(session_id, ConversationState(session_id=session_id))
         
-        # If this is a new intent, reset the state and figure out what we need
-        if current_state.current_intent != intent_response.intent:
-            current_state.current_intent = intent_response.intent
-            # Start with the entities GPT just extracted
-            current_state.collected_entities = intent_response.entities
-            current_state.missing_requirements = []  # We'll calculate this below
-        else:
-            # We are in the middle of a conversation for the same intent
-            # The user's new transcript is the answer to our last question
+        # FIX: If this is an unknown intent BUT we have an active conversation, treat it as an answer
+        if (intent_response.intent == IntentType.UNKNOWN and 
+            current_state.current_intent and 
+            current_state.missing_requirements):
+            
+            print(f"🔍 Treating unknown intent as response to previous question: {intent_response.raw_transcript}")
+            # Assume this is answering our last question
+            intent_response.intent = current_state.current_intent
+            
+            # Try to extract entities from what might be the answer
             if current_state.missing_requirements:
-                next_entity = current_state.missing_requirements[0]
-                # Assume the user's entire response is the value for the entity we asked for
-                if intent_response.entities:
-                    current_state.collected_entities.update(intent_response.entities)
-                # We've collected it, so remove it from the missing list
-                current_state.missing_requirements.pop(0)
+                next_requirement = current_state.missing_requirements[0]
+                # For appointment IDs, we can try to extract numbers from the raw transcript
+                if next_requirement == "appointment_id":
+                    # Simple extraction: look for numbers in the transcript
+                    import re
+                    numbers = re.findall(r'\d+', intent_response.raw_transcript)
+                    if numbers:
+                        intent_response.entities["appointment_id"] = " ".join(numbers)
+                        print(f"✅ Extracted appointment_id from numbers: {intent_response.entities['appointment_id']}")
+                else:
+                    # For other requirements, use the raw transcript as the value
+                    intent_response.entities[next_requirement] = intent_response.raw_transcript
+                    print(f"📝 Using raw transcript for {next_requirement}: {intent_response.raw_transcript}")
+        
+        # 1. Get or create the conversation state for this session
+        current_state = self.active_conversations.get(session_id, ConversationState(session_id=session_id))
 
-        # Check if ANY of the valid combinations are fully satisfied by our collected_entities
-        is_requirement_met = False
-        for combination in valid_combinations:
-            # Check if every entity in this combination is present and not null/empty
-            if all(current_state.collected_entities.get(entity) for entity in combination):
-                is_requirement_met = True
-                break  # We found one valid combination, that's enough!
-
-        if is_requirement_met:
-            # WE HAVE EVERYTHING! Now we can proceed to database actions.
-            response_text = self._generate_confirmation_message(intent_response.intent, current_state.collected_entities)
-            # Reset state after successful completion
+        # 2. Check if this is a new intent or a response to a previous question
+        if current_state.current_intent != intent_response.intent:
+            # It's a NEW INTENT! Reset and start fresh.
             current_state.reset()
+            current_state.current_intent = intent_response.intent
+            # Start with the entities OpenAI just extracted
+            current_state.collected_entities = intent_response.entities
+            # Figure out what we're missing
+            required_slots = openai_service.REQUIREMENTS_MAP.get(intent_response.intent, [])
+            current_state.missing_requirements = [
+                slot for slot in required_slots 
+                if not intent_response.entities.get(slot) # Check if the slot is missing
+            ]
+
         else:
-            # WE STILL NEED MORE INFO. Figure out the SMARTEST question to ask.
-            next_entity_to_ask = self._find_next_required_entity(valid_combinations, current_state.collected_entities)
-            if next_entity_to_ask:
-                response_text = self._generate_clarification_question(next_entity_to_ask, intent_response.intent)
-                current_state.missing_requirements = [next_entity_to_ask]  # Now we are waiting for this
-            else:
-                # Fallback: shouldn't happen often, but if we can't figure out what to ask.
-                response_text = "I need more information to help you with that. Could you please provide more details?"
-                current_state.missing_requirements = []
+            # It's the SAME INTENT. The user is probably answering our last question.
+            if current_state.missing_requirements:
+                next_slot = current_state.missing_requirements[0]
+                
+                # NEW FIXED CODE: Use extracted entity if available, otherwise use raw transcript
+                if next_slot in intent_response.entities:
+                    # YES! OpenAI found the exact entity we were looking for
+                    slot_value = intent_response.entities[next_slot]
+                    print(f"✅ Extracted {next_slot}: {slot_value}")
+                else:
+                    # OpenAI didn't find it, so use the raw transcript as a fallback
+                    slot_value = intent_response.raw_transcript
+                    print(f"⚠️  Using raw transcript for {next_slot}: {slot_value}")
+                
+                current_state.collected_entities[next_slot] = slot_value
+                current_state.missing_requirements.pop(0)  # Remove from missing list
 
-        return response_text, current_state
+            # CRITICAL: Check if user provided OTHER entities we need
+            for slot, value in intent_response.entities.items():
+                if slot in current_state.missing_requirements:  # Don't double-process
+                    print(f"🎁 Bonus extracted {slot}: {value}")
+                    current_state.collected_entities[slot] = value
+                    if slot in current_state.missing_requirements:
+                        current_state.missing_requirements.remove(slot)
 
-    def _find_next_required_entity(self, valid_combinations, collected_entities):
-        """
-        Smart logic to find the most important entity to ask for next.
-        This is a simple implementation - you can make it more complex.
-        """
-        # Flatten all required entities across all combinations
-        all_required_entities = set()
-        for combination in valid_combinations:
-            all_required_entities.update(combination)
-        
-        # Find which required entities we are still missing
-        missing_entities = [entity for entity in all_required_entities if not collected_entities.get(entity)]
-        
-        # Just return the first missing entity as a simple strategy.
-        # A more advanced strategy would prioritize entities that appear in the most combinations.
-        return missing_entities[0] if missing_entities else None
+        # 3. Save the updated state
+        self.active_conversations[session_id] = current_state
 
-    def _generate_clarification_question(self, missing_entity: str, intent: IntentType) -> str:
+        # 4. Check: Do we have everything we need?
+        if not current_state.missing_requirements:
+            # YES! We are ready to talk to the database.
+            current_state.is_fulfilled = True
+            # For now, just confirm. Later, this will trigger a DB insert.
+            response_text = self._generate_confirmation_message(current_state)
+            # Reset after fulfilling
+            current_state.reset()
+            return response_text, True
+        else:
+            # NO. We need to ask for the next piece of information.
+            next_slot = current_state.missing_requirements[0]
+            response_text = self._generate_question(next_slot, intent_response.intent)
+            return response_text, True
+
+    def _generate_question(self, missing_slot: str, intent: IntentType) -> str:
         """Generates a natural language question to ask for missing information."""
         questions = {
             "patient_name": "Sure, may I please have your full name?",
-            "date": "What date are you referring to?",
-            "time": "What time do you have in mind?",
+            "date": "What date would you like to book for?",
+            "time": "What time works best for you?",
             "doctor_name": "Which doctor would you like to see?",
-            "new_date": "What is the new date you'd like to reschedule to?",
+            "appointment_id": "Could you please provide your appointment ID?",
+            "new_date": "What is the new date you'd prefer?",
             "new_time": "What is the new time you'd prefer?",
-            "appointment_id": "Could you please provide your appointment ID or reference number?",
         }
-        return questions.get(missing_entity, "Could you please provide that information?")
+        return questions.get(missing_slot, "Could you please provide that information?")
 
-    def _generate_confirmation_message(self, intent: IntentType, entities: Dict) -> str:
-        """Generates a confirmation message before acting (will later trigger DB)."""
-        # Check which combination was satisfied
-        valid_combinations = openai_service.REQUIREMENTS_MAP.get(intent, [])
-        used_combination = None
-        for combination in valid_combinations:
-            if all(entities.get(entity) for entity in combination):
-                used_combination = combination
-                break
+    def _generate_confirmation_message(self, state: ConversationState) -> str:
+        """Generates a confirmation message with the collected info."""
+        # Build a simple confirmation message from the collected entities
+        details = ", ".join([f"{k}: {v}" for k, v in state.collected_entities.items()])
+        return f"Great! I will process your request for: {details}."
 
-        if intent == IntentType.CANCEL_APPOINTMENT:
-            if used_combination == ["appointment_id"]:
-                return f"Okay, I will cancel appointment {entities['appointment_id']}."
-            else:  # must be ["patient_name", "date"]
-                return f"Okay, I will cancel the appointment for {entities['patient_name']} on {entities['date']}."
-
-        elif intent == IntentType.BOOK_APPOINTMENT:
-            return f"Great! I'll book an appointment for {entities['patient_name']} with {entities['doctor_name']} on {entities['date']} at {entities['time']}."
-
-        elif intent == IntentType.RESCHEDULE_APPOINTMENT:
-            if used_combination == ["appointment_id", "new_date", "new_time"]:
-                return f"Okay, I will reschedule appointment {entities['appointment_id']} to {entities['new_date']} at {entities['new_time']}."
-            else:  # must be ["patient_name", "date", "new_date", "new_time"]
-                return f"Okay, I will reschedule the appointment for {entities['patient_name']} from {entities['date']} to {entities['new_date']} at {entities['new_time']}."
-
-        return "Okay, I'll proceed with that."
-
-
-# Create global instance - THIS IS WHAT THE TEST IS TRYING TO IMPORT
+# Create a global instance
 conversation_service = ConversationService()
