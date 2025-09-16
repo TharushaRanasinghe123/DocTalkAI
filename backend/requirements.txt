@@ -8,3 +8,5 @@ uuid==1.30
 openai==0.27.8
 elevenlabs
 motor
+email-validator
+python-jose[cryptography]

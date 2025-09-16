@@ -140,6 +140,7 @@ from dotenv import load_dotenv
 from app.services import handle_websocket_connection
 from app.services.mongodb_service import mongodb_service
 from app.routes import appointments
+from app.routes import auth
 
 # For debugging WebSocket connections
 from starlette.websockets import WebSocketState
@@ -234,6 +235,8 @@ async def test_db_connection():
         }
 
 app.include_router(appointments.router, prefix="/api/v1", tags=["appointments"])
+
+app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"])
 
 
 if __name__ == "__main__":

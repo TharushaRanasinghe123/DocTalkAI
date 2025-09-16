@@ -15,6 +15,7 @@ class MongoDBService:
         self.db_name = "doctalk_db"
         self.client = None
         self.db = None
+        self.users_collection = None
     
     async def connect(self):
         """Connect to MongoDB Atlas"""
@@ -23,11 +24,13 @@ class MongoDBService:
             # Test connection
             await self.client.admin.command('ping')
             self.db = self.client[self.db_name]
+            self.users_collection = self.db['users']
             print("✅ Connected to MongoDB Atlas successfully!")
             return True
         except Exception as e:
             print(f"❌ MongoDB connection failed: {e}")
             return False
+        
         
     async def insert_appointment(self, appointment_data: dict):
         """Insert a new appointment and return just the appointment ID string"""
@@ -219,6 +222,33 @@ class MongoDBService:
             print(f"❌ Failed to get appointment: {e}")
             return None
     
+    # USER MANAGEMENT METHODS
+    async def create_user(self, user_data: dict):
+        """Create a new user"""
+        try:
+            result = await self.users_collection.insert_one(user_data)
+            return result.inserted_id
+        except Exception as e:
+            print(f"❌ Failed to create user: {e}")
+            return None
+
+    async def find_user_by_email(self, email: str):
+        """Find a user by email"""
+        try:
+            user = await self.users_collection.find_one({"email": email})
+            return user
+        except Exception as e:
+            print(f"❌ Failed to find user: {e}")
+            return None
+
+    async def find_user_by_id(self, user_id: str):
+        """Find a user by ID"""
+        try:
+            user = await self.users_collection.find_one({"_id": ObjectId(user_id)})
+            return user
+        except Exception as e:
+            print(f"❌ Failed to find user: {e}")
+            return None
 
 # Global instance
 mongodb_service = MongoDBService()
