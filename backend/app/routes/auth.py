@@ -75,7 +75,48 @@ async def login(login_data: UserLogin):
         "token_type": "bearer",
         "role": user["role"],
         "user_id": str(user["_id"]),
-        "force_password_change": False
+        "force_password_change": False,
+        "name": user.get("name", "Doctor"),  # Add this line
+        "email": user["email"]
     }
 
+@router.post("/change-password")
+async def change_password(change_data: dict):
+    """Change password for users with force_password_change"""
+    try:
+        user_id = change_data.get("user_id")
+        new_password = change_data.get("new_password")
+        
+        if not user_id or not new_password:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="User ID and new password are required"
+            )
+        
+        # Find user and update password
+        user = await mongodb_service.find_user_by_id(user_id)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+        
+        hashed_password = get_password_hash(new_password)
+        
+        # Update password and remove force_password_change flag
+        await mongodb_service.users_collection.update_one(
+            {"_id": ObjectId(user_id)},
+            {"$set": {
+                "hashed_password": hashed_password,
+                "force_password_change": False
+            }}
+        )
+        
+        return {"message": "Password changed successfully"}
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to change password: {str(e)}"
+        )
 # Add this to your main.py to include the auth routes

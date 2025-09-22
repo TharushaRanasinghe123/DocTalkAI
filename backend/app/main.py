@@ -141,6 +141,7 @@ from app.services import handle_websocket_connection
 from app.services.mongodb_service import mongodb_service
 from app.routes import appointments
 from app.routes import auth
+from app.routes import admin
 
 # For debugging WebSocket connections
 from starlette.websockets import WebSocketState
@@ -157,9 +158,9 @@ app = FastAPI(
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, replace with your frontend URL
+    allow_origins=["http://localhost:3000"],  # In production, replace with your frontend URL
     allow_credentials=True,
-    allow_methods=["GET", "POST", "OPTIONS", "WEBSOCKET", "HEAD"],
+    allow_methods=["GET", "POST", "OPTIONS", "WEBSOCKET", "HEAD","PUT"],
     allow_headers=["*"],
     expose_headers=["*"]
 )
@@ -233,10 +234,56 @@ async def test_db_connection():
             "status": "disconnected", 
             "error": "MongoDB not connected. Check your connection string."
         }
+    
+@app.on_event("startup")
+async def startup_event():
+    """Connect to MongoDB on application startup"""
+    success = await mongodb_service.connect()
+    if success:
+        print("🎯 MongoDB connection established during startup")
+        await initialize_admin_user()  # ← ADD THIS LINE
+    else:
+        print("⚠️ MongoDB connection failed during startup")
+
+# ← ADD THE initialize_admin_user FUNCTION RIGHT HERE
+async def initialize_admin_user():
+    """Create admin user from environment variables"""
+    try:
+        import os
+        admin_email = os.getenv("ADMIN_EMAIL")
+        admin_password = os.getenv("ADMIN_INITIAL_PASSWORD")
+        admin_name = os.getenv("ADMIN_NAME")
+        
+        existing_admin = await mongodb_service.find_user_by_email(admin_email)
+        
+        if not existing_admin:
+            from app.utils.auth import get_password_hash
+            import datetime
+            
+            admin_user = {
+                "email": admin_email,
+                "name": admin_name,
+                "hashed_password": get_password_hash(admin_password),
+                "role": "admin",
+                "force_password_change": True,
+                "created_at": datetime.datetime.utcnow()
+            }
+            
+            await mongodb_service.create_user(admin_user)
+            print(f"✅ Admin user created: {admin_email}")
+            print(f"📧 Email: {admin_email}")
+            print(f"🔑 Password: {admin_password}")
+            print("⚠️ Please change password after first login!")
+        else:
+            print("✅ Admin user already exists")
+            
+    except Exception as e:
+        print(f"⚠️ Failed to initialize admin user: {e}")
 
 app.include_router(appointments.router, prefix="/api/v1", tags=["appointments"])
 
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"])
+app.include_router(admin.router, prefix="/api/v1", tags=["Admin"])
 
 
 if __name__ == "__main__":

@@ -16,6 +16,11 @@ class UserCreate(UserBase):
     role: UserRole = UserRole.PATIENT
     phone: Optional[str] = None
 
+class UserCreateByAdmin(UserBase):
+    password: str
+    specialization: str
+    role: UserRole = UserRole.DOCTOR
+
 class UserLogin(BaseModel):
     email: EmailStr
     password: str
