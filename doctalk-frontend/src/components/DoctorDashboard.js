@@ -114,9 +114,9 @@ const DoctorDashboard = () => {
   return (
     <div className="min-h-screen bg-gray-50 flex">
       {/* Sidebar */}
-      <div className="w-64 bg-white shadow-sm border-r border-gray-200">
+      <div className="w-64 bg-white shadow-sm border-r border-gray-200 fixed h-screen flex flex-col">
         {/* Logo */}
-        <div className="p-6 border-b border-gray-200">
+        <div className="p-6 border-b border-gray-200 flex-shrink-0">
           <div className="flex items-center space-x-3">
             <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
               <div className="w-6 h-6 bg-white rounded-full flex items-center justify-center">
@@ -131,7 +131,7 @@ const DoctorDashboard = () => {
         </div>
 
         {/* Navigation */}
-        <nav className="p-4 space-y-1">
+        <nav className="p-4 space-y-1 flex-shrink-0">
           {sidebarItems.map((item) => {
             const Icon = item.icon;
             return (
@@ -152,7 +152,7 @@ const DoctorDashboard = () => {
         </nav>
 
         {/* Quick Stats in Sidebar */}
-        <div className="p-4 mt-8">
+        <div className="p-4 mt-4 flex-1 overflow-y-auto">
           <h3 className="text-sm font-semibold text-gray-900 mb-3">Quick Stats</h3>
           <div className="space-y-3">
             {quickStats.map((stat, index) => (
@@ -171,9 +171,9 @@ const DoctorDashboard = () => {
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col ml-64">
         {/* Header */}
-        <header className="bg-white border-b border-gray-200 px-6 py-4">
+        <header className="bg-white border-b border-gray-200 px-6 py-4 fixed right-0 left-64 top-0 z-10">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-2xl font-bold text-gray-900">Welcome, {username}</h2>
@@ -201,7 +201,7 @@ const DoctorDashboard = () => {
         </header>
 
         {/* Stats Cards */}
-        <div className="px-6 py-6">
+        <div className="px-6 py-6 mt-20">
           <div className="grid grid-cols-4 gap-6 mb-8">
             <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
               <div className="flex items-center justify-between">
@@ -253,7 +253,7 @@ const DoctorDashboard = () => {
           </div>
 
           {/* Tab Navigation */}
-          <div className="bg-white rounded-t-xl border-b border-gray-200">
+          <div className="bg-white rounded-t-xl border-b border-gray-200 sticky top-20 z-10">
             <div className="flex space-x-8 px-6">
               {[
                 { id: 'appointments', label: 'Appointments', icon: Calendar },
