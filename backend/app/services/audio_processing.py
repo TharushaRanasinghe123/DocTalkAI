@@ -5,6 +5,7 @@ from fastapi import WebSocket
 from .transcript_buffer import TranscriptBuffer
 from .websocket_utils import safe_send_json
 from app.models.intent_model import IntentType
+import difflib
 
 try:
     from app.services.elevenlabs_service import elevenlabs_service
@@ -71,6 +72,72 @@ def convert_spoken_numbers_to_digits(text):
             i += 1
     
     return ' '.join(result)
+
+async def _verify_doctor_exists_enhanced(doctor_name: str) -> dict:
+    """Enhanced doctor verification with fuzzy matching for speech recognition errors"""
+    try:
+        doctors = await mongodb_service.get_available_doctors()
+        mentioned_lower = doctor_name.lower().replace('dr.', '').replace('doctor', '').strip()
+        
+        exact_matches = []
+        fuzzy_matches = []
+        
+        for doctor in doctors:
+            doc_name_lower = doctor["name"].lower()
+            
+            # 1. Exact match
+            if mentioned_lower == doc_name_lower:
+                return {
+                    "status": "found",
+                    "matched_name": doctor["name"],
+                    "confidence": "exact"
+                }
+            
+            # 2. Remove spaces and compare (handles "Johndoe" vs "John Doe")
+            mentioned_no_spaces = mentioned_lower.replace(' ', '')
+            doc_name_no_spaces = doc_name_lower.replace(' ', '')
+            
+            if mentioned_no_spaces == doc_name_no_spaces:
+                return {
+                    "status": "found", 
+                    "matched_name": doctor["name"],
+                    "confidence": "spacing_fixed"
+                }
+            
+            # 3. Fuzzy matching for similar names
+            similarity = difflib.SequenceMatcher(None, mentioned_lower, doc_name_lower).ratio()
+            if similarity > 0.7:  # 70% similarity threshold
+                fuzzy_matches.append((doctor["name"], similarity))
+            
+            # 4. Check if mentioned name is part of doctor name or vice versa
+            if mentioned_lower in doc_name_lower or doc_name_lower in mentioned_lower:
+                fuzzy_matches.append((doctor["name"], 0.8))  # High confidence for partial matches
+        
+        # Handle fuzzy matches
+        if fuzzy_matches:
+            # Sort by similarity score (highest first)
+            fuzzy_matches.sort(key=lambda x: x[1], reverse=True)
+            best_match = fuzzy_matches[0]
+            
+            if best_match[1] > 0.8:  # High confidence
+                return {
+                    "status": "found",
+                    "matched_name": best_match[0],
+                    "confidence": "fuzzy_high"
+                }
+            else:  # Medium confidence - ask for confirmation
+                return {
+                    "status": "multiple_matches",
+                    "matches": [match[0] for match in fuzzy_matches[:3]],
+                    "matched_name": best_match[0],
+                    "confidence": "fuzzy_medium"
+                }
+        
+        return {"status": "not_found"}
+            
+    except Exception as e:
+        print(f"❌ Doctor verification error: {e}")
+        return {"status": "error"}
 
 def proper_capitalization(text):
     """Convert text to proper capitalization with name and proper noun support"""
@@ -189,19 +256,67 @@ async def process_complete_sentence(client_ws, transcript):
         if MONGODB_AVAILABLE and intent_response.entities:
             try:
                 # Handle different intents with database operations
+                # In process_complete_sentence function, replace the BOOK_APPOINTMENT section:
+
                 if intent_response.intent == IntentType.BOOK_APPOINTMENT:
-                    # Check if we have enough data to book appointment
-                    required_fields = ["patient_name", "doctor_name", "date", "time"]
-                    if all(intent_response.entities.get(field) for field in required_fields):
-                        appointment_data = intent_response.entities.copy()
-                        # Now insert_appointment returns just the ID string
-                        appointment_id = await mongodb_service.insert_appointment(appointment_data)
-                        if appointment_id:
-                            print(f"✅ Appointment booked in database! ID: {appointment_id}")
-                            intent_response.processed_response = f"Thank you, {appointment_data['patient_name']}! I have booked your appointment with {appointment_data['doctor_name']} on {appointment_data['date']} at {appointment_data['time']}. Your appointment ID is {appointment_id}."
-                        else:
-                            print("❌ Failed to save appointment to database")
-                            intent_response.processed_response = "Sorry, I encountered an error while booking your appointment."                
+                    # === ENHANCED DOCTOR VALIDATION ===
+                    doctor_name = intent_response.entities.get("doctor_name")
+                    
+                    if doctor_name:
+                        # Verify doctor exists with fuzzy matching
+                        verification_result = await _verify_doctor_exists_enhanced(doctor_name)
+                        
+                        if verification_result["status"] == "not_found":
+                            # Doctor not found
+                            available_doctors = await mongodb_service.get_available_doctors()
+                            alternatives = ", ".join([f"Dr. {doc['name']}" for doc in available_doctors[:3]])
+                            intent_response.processed_response = f"I don't see Dr. {doctor_name} in our system. We have {alternatives}. Who would you prefer?"
+                            
+                        elif verification_result["status"] == "multiple_matches":
+                            # Multiple fuzzy matches found
+                            matches = ", ".join([f"Dr. {match}" for match in verification_result["matches"][:2]])
+                            intent_response.processed_response = f"Did you mean {matches}? Please confirm which doctor you'd like to see."
+                            
+                        elif verification_result["status"] == "found":
+                            # Doctor found - use corrected name and proceed with booking
+                            corrected_name = verification_result["matched_name"]
+                            intent_response.entities["doctor_name"] = corrected_name
+                            
+                            # Check if we have all required data
+                            required_fields = ["patient_name", "doctor_name", "date", "time"]
+                            if all(intent_response.entities.get(field) for field in required_fields):
+                                appointment_data = {
+                                    # Use the correct field names that match Postman bookings
+                                    "patientName": intent_response.entities["patient_name"],
+                                    "doctorName": intent_response.entities["doctor_name"],  # ← FIXED: doctorName instead of doctor_name
+                                    "date": intent_response.entities["date"],
+                                    "time": intent_response.entities["time"],
+                                    "reason": intent_response.entities.get("reason", ""),
+                                    # Include both for compatibility if needed
+                                    "patient_name": intent_response.entities["patient_name"],
+                                    "doctor_name": intent_response.entities["doctor_name"]
+                                }
+    
+                                
+                                # BOOK THE APPOINTMENT
+                                appointment_id = await mongodb_service.insert_appointment(appointment_data)
+                                
+                                if appointment_id:
+                                    print(f"✅ Appointment booked in database! ID: {appointment_id}")
+                                    intent_response.processed_response = f"Thank you, {appointment_data['patientName']}! I have booked your appointment with Dr. {appointment_data['doctorName']} on {appointment_data['date']} at {appointment_data['time']}. Your appointment ID is {appointment_id}."
+                                else:
+                                    print("❌ Failed to save appointment to database")
+                                    intent_response.processed_response = "Sorry, I encountered an error while booking your appointment."
+                            else:
+                                # Missing required fields - let OpenAI handle asking for missing info
+                                print("⚠️ Missing required fields for booking")
+                                # The processed_response from OpenAI will naturally ask for missing information
+                                
+                    else:
+                        # No doctor specified
+                        available_doctors = await mongodb_service.get_available_doctors()
+                        doctors_list = ", ".join([f"Dr. {doc['name']}" for doc in available_doctors[:3]])
+                        intent_response.processed_response = f"I'd be happy to book your appointment! We have {doctors_list}. Which doctor would you like to see?"
                 elif intent_response.intent == IntentType.CANCEL_APPOINTMENT:
                     # Cancel appointment by ID or patient info
                     if intent_response.entities.get("appointment_id"):

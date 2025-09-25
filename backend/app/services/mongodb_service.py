@@ -249,6 +249,20 @@ class MongoDBService:
         except Exception as e:
             print(f"❌ Failed to find user: {e}")
             return None
+    
+    async def get_available_doctors(self):
+        """Get list of available doctors"""
+        try:
+            doctors = []
+            async for doctor in self.users_collection.find({"role": "doctor"}):
+                doctors.append({
+                    "name": doctor.get("name"),
+                    "specialization": doctor.get("specialization", "General")
+                })
+            return doctors
+        except Exception as e:
+            print(f"Error fetching doctors: {e}")
+            return []
 
 # Global instance
 mongodb_service = MongoDBService()
