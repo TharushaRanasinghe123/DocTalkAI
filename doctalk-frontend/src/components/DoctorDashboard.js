@@ -282,7 +282,7 @@ const DoctorDashboard = () => {
           </div>
 
           {/* Content Area */}
-          <div className="bg-white rounded-b-xl shadow-sm border-l border-r border-b border-gray-200 p-6">
+          <div className="bg-white rounded-b-xl shadow-sm border-l border-r border-b border-gray-200 p-6" style={{ height: 'calc(100vh - 380px)', overflowY: 'auto' }}>
             {renderContent()}
           </div>
         </div>
