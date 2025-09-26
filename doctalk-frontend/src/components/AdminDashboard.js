@@ -12,11 +12,18 @@ import {
   Activity,
   Plus,
   X,
-  Check
+  Check,
+  RefreshCw
 } from 'lucide-react';
 
 const AdminDashboard = () => {
-  const [stats, setStats] = useState({});
+  const [stats, setStats] = useState({
+    totalPatients: 0,
+    totalDoctors: 0,
+    todayAppointments: 0,
+    monthlyRevenue: '$0'
+  });
+  const [loading, setLoading] = useState(true);
   const [showAddDoctor, setShowAddDoctor] = useState(false);
   const [newDoctor, setNewDoctor] = useState({
     name: '',
@@ -28,14 +35,52 @@ const AdminDashboard = () => {
   const [activeTab, setActiveTab] = useState('overview');
   const navigate = useNavigate();
 
+  // Fetch real stats from API
+  const fetchStats = async () => {
+    try {
+      setLoading(true);
+      const token = localStorage.getItem('token');
+      
+      const response = await fetch('http://localhost:8001/api/v1/admin/stats', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setStats({
+          totalPatients: data.total_patients || 0,
+          totalDoctors: data.total_doctors || 0,
+          todayAppointments: data.today_appointments || 0,
+          monthlyRevenue: data.monthly_revenue || '$0'
+        });
+      } else {
+        console.error('Failed to fetch stats');
+        // Fallback to placeholder values if API fails
+        setStats({
+          totalPatients: 0,
+          totalDoctors: 0,
+          todayAppointments: 0,
+          monthlyRevenue: '$0'
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching stats:', error);
+      setStats({
+        totalPatients: 0,
+        totalDoctors: 0,
+        todayAppointments: 0,
+        monthlyRevenue: '$0'
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    // Load stats
-    setStats({
-      totalPatients: 1247,
-      totalDoctors: 156,
-      appointmentsToday: 91,
-      revenue: '$12,845'
-    });
+    fetchStats();
   }, []);
 
   const handleAddDoctor = async (e) => {
@@ -58,6 +103,8 @@ const AdminDashboard = () => {
         setMessage('Doctor added successfully!');
         setNewDoctor({ name: '', email: '', specialization: '', password: '' });
         setShowAddDoctor(false);
+        // Refresh stats after adding a new doctor
+        fetchStats();
       } else {
         setMessage('Error: ' + data.detail);
       }
@@ -80,8 +127,18 @@ const AdminDashboard = () => {
   ];
 
   const quickStats = [
-    { label: 'Today', value: stats.appointmentsToday?.toString() || '0', sublabel: 'Appointments', color: 'bg-blue-50 text-blue-600' },
-    { label: 'Revenue', value: stats.revenue || '$0', sublabel: 'This Month', color: 'bg-green-50 text-green-600' },
+    { 
+      label: 'Today', 
+      value: stats.todayAppointments.toString(), 
+      sublabel: 'Appointments', 
+      color: 'bg-blue-50 text-blue-600' 
+    },
+    { 
+      label: 'Revenue', 
+      value: stats.monthlyRevenue, 
+      sublabel: 'This Month', 
+      color: 'bg-green-50 text-green-600' 
+    },
   ];
 
   const renderContent = () => {
@@ -105,6 +162,18 @@ const AdminDashboard = () => {
         return <OverviewTab stats={stats} />;
     }
   };
+
+  // Loading state
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <RefreshCw className="animate-spin h-12 w-12 text-purple-600 mx-auto mb-4" />
+          <p className="text-gray-600">Loading dashboard data...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
@@ -177,6 +246,14 @@ const AdminDashboard = () => {
               </p>
             </div>
             <div className="flex items-center space-x-4">
+              <button 
+                onClick={fetchStats}
+                className="flex items-center space-x-2 text-gray-600 hover:text-gray-900 transition-colors"
+                title="Refresh data"
+              >
+                <RefreshCw size={20} />
+                <span className="text-sm">Refresh</span>
+              </button>
               <button className="p-2 text-gray-400 hover:text-gray-600 transition-colors">
                 <Bell size={20} />
               </button>
@@ -228,7 +305,7 @@ const AdminDashboard = () => {
                   <div className="flex items-center space-x-2 mb-2">
                     <Calendar size={16} className="text-gray-400" />
                   </div>
-                  <p className="text-3xl font-bold text-gray-900">{stats.appointmentsToday}</p>
+                  <p className="text-3xl font-bold text-gray-900">{stats.todayAppointments}</p>
                   <p className="text-sm text-gray-600">Today's Appointments</p>
                 </div>
               </div>
@@ -240,7 +317,7 @@ const AdminDashboard = () => {
                   <div className="flex items-center space-x-2 mb-2">
                     <DollarSign size={16} className="text-gray-400" />
                   </div>
-                  <p className="text-3xl font-bold text-gray-900">{stats.revenue}</p>
+                  <p className="text-3xl font-bold text-gray-900">{stats.monthlyRevenue}</p>
                   <p className="text-sm text-gray-600">Revenue</p>
                 </div>
               </div>
@@ -286,7 +363,7 @@ const AdminDashboard = () => {
   );
 };
 
-// Tab Components
+// Tab Components (keep the same as before)
 const OverviewTab = ({ stats }) => {
   return (
     <div>

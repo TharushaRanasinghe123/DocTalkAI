@@ -3,6 +3,7 @@ from app.models.user import UserCreateByAdmin
 from app.services.mongodb_service import mongodb_service
 from app.utils.auth import get_password_hash
 import datetime
+from datetime import datetime
 
 router = APIRouter(tags=["Admin"])
 
@@ -47,3 +48,39 @@ async def add_doctor(doctor_data: UserCreateByAdmin):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to add doctor: {str(e)}"
         )
+    
+@router.get("/admin/stats")
+async def get_admin_stats():
+    """Get statistics for admin dashboard"""
+    try:
+        # Get total patients
+        total_patients = await mongodb_service.db.users.count_documents({"role": "patient"})
+        
+        # Get total doctors
+        total_doctors = await mongodb_service.db.users.count_documents({"role": "doctor"})
+        
+        # Get today's appointments
+        today = datetime.now().strftime("%Y-%m-%d")
+        today_appointments = await mongodb_service.db.appointments.count_documents({
+            "date": today,
+            "status": {"$in": ["booked", "scheduled"]}
+        })
+        
+        # Get monthly revenue (placeholder)
+        monthly_revenue = 12845
+        
+        return {
+            "total_patients": total_patients,
+            "total_doctors": total_doctors,
+            "today_appointments": today_appointments,
+            "monthly_revenue": f"${monthly_revenue:,}"
+        }
+        
+    except Exception as e:
+        print(f"Error fetching stats: {e}")
+        return {
+            "total_patients": 0,
+            "total_doctors": 0,
+            "today_appointments": 0,
+            "monthly_revenue": "$0"
+        }
