@@ -13,7 +13,10 @@ import {
   Plus,
   X,
   Check,
-  RefreshCw
+  RefreshCw,
+  Search,
+  Edit3,
+  Trash2
 } from 'lucide-react';
 
 const AdminDashboard = () => {
@@ -58,7 +61,6 @@ const AdminDashboard = () => {
         });
       } else {
         console.error('Failed to fetch stats');
-        // Fallback to placeholder values if API fails
         setStats({
           totalPatients: 0,
           totalDoctors: 0,
@@ -103,7 +105,6 @@ const AdminDashboard = () => {
         setMessage('Doctor added successfully!');
         setNewDoctor({ name: '', email: '', specialization: '', password: '' });
         setShowAddDoctor(false);
-        // Refresh stats after adding a new doctor
         fetchStats();
       } else {
         setMessage('Error: ' + data.detail);
@@ -163,7 +164,6 @@ const AdminDashboard = () => {
     }
   };
 
-  // Loading state
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -179,7 +179,6 @@ const AdminDashboard = () => {
     <div className="min-h-screen bg-gray-50 flex">
       {/* Sidebar */}
       <div className="w-64 bg-white shadow-sm border-r border-gray-200">
-        {/* Logo */}
         <div className="p-6 border-b border-gray-200">
           <div className="flex items-center space-x-3">
             <div className="w-10 h-10 bg-purple-600 rounded-lg flex items-center justify-center">
@@ -194,7 +193,6 @@ const AdminDashboard = () => {
           </div>
         </div>
 
-        {/* Navigation */}
         <nav className="p-4 space-y-1">
           {sidebarItems.map((item) => {
             const Icon = item.icon;
@@ -215,7 +213,6 @@ const AdminDashboard = () => {
           })}
         </nav>
 
-        {/* Quick Stats in Sidebar */}
         <div className="p-4 mt-8">
           <h3 className="text-sm font-semibold text-gray-900 mb-3">Quick Stats</h3>
           <div className="space-y-3">
@@ -236,7 +233,6 @@ const AdminDashboard = () => {
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col">
-        {/* Header */}
         <header className="bg-white border-b border-gray-200 px-6 py-4">
           <div className="flex items-center justify-between">
             <div>
@@ -272,7 +268,6 @@ const AdminDashboard = () => {
           </div>
         </header>
 
-        {/* Stats Cards */}
         <div className="px-6 py-6">
           <div className="grid grid-cols-4 gap-6 mb-8">
             <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
@@ -324,7 +319,6 @@ const AdminDashboard = () => {
             </div>
           </div>
 
-          {/* Tab Navigation */}
           <div className="bg-white rounded-t-xl border-b border-gray-200">
             <div className="flex space-x-8 px-6">
               {[
@@ -353,7 +347,6 @@ const AdminDashboard = () => {
             </div>
           </div>
 
-          {/* Content Area */}
           <div className="bg-white rounded-b-xl shadow-sm border-l border-r border-b border-gray-200 p-6" style={{ height: 'calc(100vh - 380px)', overflowY: 'auto' }}>
             {renderContent()}
           </div>
@@ -363,7 +356,7 @@ const AdminDashboard = () => {
   );
 };
 
-// Tab Components (keep the same as before)
+// Tab Components
 const OverviewTab = ({ stats }) => {
   return (
     <div>
@@ -417,12 +410,101 @@ const OverviewTab = ({ stats }) => {
 };
 
 const DoctorsTab = ({ showAddDoctor, setShowAddDoctor, newDoctor, setNewDoctor, handleAddDoctor, message }) => {
+  const [doctors, setDoctors] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [specializationFilter, setSpecializationFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
+
+  const fetchDoctors = async () => {
+    try {
+      setLoading(true);
+      const token = localStorage.getItem('token');
+      
+      const response = await fetch('http://localhost:8001/api/v1/admin/doctors', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setDoctors(data.doctors || []);
+      } else {
+        console.error('Failed to fetch doctors');
+        setDoctors([]);
+      }
+    } catch (error) {
+      console.error('Error fetching doctors:', error);
+      setDoctors([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchDoctors();
+  }, []);
+
+  const specializations = [...new Set(doctors.map(doctor => doctor.specialization))];
+
+  const filteredDoctors = doctors.filter(doctor => {
+    const matchesSearch = doctor.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         doctor.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         doctor.specialization.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    const matchesSpecialization = specializationFilter === 'all' || 
+                                 doctor.specialization === specializationFilter;
+    
+    const matchesStatus = statusFilter === 'all' ||
+                         (statusFilter === 'active' && !doctor.force_password_change) ||
+                         (statusFilter === 'pending' && doctor.force_password_change);
+    
+    return matchesSearch && matchesSpecialization && matchesStatus;
+  });
+
+  const handleDeleteDoctor = async (doctorId) => {
+    if (window.confirm('Are you sure you want to delete this doctor?')) {
+      try {
+        const token = localStorage.getItem('token');
+        const response = await fetch(`http://localhost:8001/api/v1/admin/doctors/${doctorId}`, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (response.ok) {
+          alert('Doctor deleted successfully');
+          fetchDoctors();
+        } else {
+          alert('Failed to delete doctor');
+        }
+      } catch (error) {
+        console.error('Error deleting doctor:', error);
+        alert('Error deleting doctor');
+      }
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center py-12">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600"></div>
+      </div>
+    );
+  }
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center space-x-2">
           <UserPlus size={20} className="text-gray-600" />
           <h2 className="text-lg font-semibold text-gray-900">Manage Doctors</h2>
+          <span className="bg-gray-100 text-gray-600 px-2 py-1 rounded-full text-sm">
+            {filteredDoctors.length} doctors
+          </span>
         </div>
         <button
           onClick={() => setShowAddDoctor(!showAddDoctor)}
@@ -433,7 +515,6 @@ const DoctorsTab = ({ showAddDoctor, setShowAddDoctor, newDoctor, setNewDoctor, 
         </button>
       </div>
 
-      {/* Add Doctor Form */}
       {showAddDoctor && (
         <div className="bg-gray-50 rounded-lg p-6 mb-6 border border-gray-200">
           <h3 className="text-lg font-semibold mb-4 text-gray-900">Add New Doctor</h3>
@@ -502,10 +583,138 @@ const DoctorsTab = ({ showAddDoctor, setShowAddDoctor, newDoctor, setNewDoctor, 
         </div>
       )}
 
-      <div className="text-center py-8 text-gray-500">
-        <UserPlus size={48} className="mx-auto mb-4 opacity-50" />
-        <p>Doctor management features will be displayed here</p>
+      {/* Search and Filter Bar */}
+      <div className="bg-white rounded-lg p-4 mb-6 border border-gray-200">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="md:col-span-2">
+            <label className="block text-sm font-medium text-gray-700 mb-2">Search Doctors</label>
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Search by name, email, or specialization..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full px-4 py-2 pl-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              />
+              <div className="absolute left-3 top-2.5 text-gray-400">
+                <Search size={16} />
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Specialization</label>
+            <select
+              value={specializationFilter}
+              onChange={(e) => setSpecializationFilter(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+            >
+              <option value="all">All Specializations</option>
+              {specializations.map(spec => (
+                <option key={spec} value={spec}>{spec}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+            >
+              <option value="all">All Status</option>
+              <option value="active">Active</option>
+              <option value="pending">Pending Setup</option>
+            </select>
+          </div>
+        </div>
+
+        {(searchTerm || specializationFilter !== 'all' || statusFilter !== 'all') && (
+          <div className="mt-3 flex justify-between items-center">
+            <span className="text-sm text-gray-600">
+              Showing {filteredDoctors.length} of {doctors.length} doctors
+            </span>
+            <button
+              onClick={() => {
+                setSearchTerm('');
+                setSpecializationFilter('all');
+                setStatusFilter('all');
+              }}
+              className="text-sm text-purple-600 hover:text-purple-800"
+            >
+              Clear all filters
+            </button>
+          </div>
+        )}
       </div>
+
+      {filteredDoctors.length === 0 ? (
+        <div className="text-center py-12 bg-white rounded-lg border border-gray-200">
+          <UserPlus size={48} className="mx-auto mb-4 text-gray-400" />
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">No doctors found</h3>
+          <p className="text-gray-600 mb-4">
+            {doctors.length === 0 ? "No doctors have been added yet." : "No doctors match your search criteria."}
+          </p>
+          {doctors.length === 0 && (
+            <button
+              onClick={() => setShowAddDoctor(true)}
+              className="bg-purple-600 text-white px-6 py-2 rounded-lg hover:bg-purple-700 transition-colors"
+            >
+              Add Your First Doctor
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="grid gap-4">
+          {filteredDoctors.map(doctor => (
+            <div key={doctor.id} className="bg-white rounded-lg p-6 border border-gray-200 hover:shadow-md transition-shadow">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-4">
+                  <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center">
+                    <User size={20} className="text-purple-600" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-900">{doctor.name}</h3>
+                    <p className="text-sm text-gray-600">{doctor.email}</p>
+                    <div className="flex items-center space-x-2 mt-1">
+                      <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs font-medium">
+                        {doctor.specialization}
+                      </span>
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                        doctor.force_password_change 
+                          ? 'bg-yellow-100 text-yellow-800' 
+                          : 'bg-green-100 text-green-800'
+                      }`}>
+                        {doctor.force_password_change ? 'Pending Setup' : 'Active'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="flex items-center space-x-2">
+                  <button className="text-blue-600 hover:text-blue-800 p-2">
+                    <Edit3 size={16} />
+                  </button>
+                  <button 
+                    onClick={() => handleDeleteDoctor(doctor.id)}
+                    className="text-red-600 hover:text-red-800 p-2"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              </div>
+              
+              <div className="mt-4 pt-4 border-t border-gray-100 text-sm text-gray-500">
+                <div className="flex justify-between">
+                  <span>Joined: {new Date(doctor.created_at).toLocaleDateString()}</span>
+                  <span>ID: {doctor.id.slice(-6)}</span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 };

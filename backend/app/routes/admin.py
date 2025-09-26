@@ -84,3 +84,27 @@ async def get_admin_stats():
             "today_appointments": 0,
             "monthly_revenue": "$0"
         }
+    
+# Add to app/routes/admin.py
+@router.get("/admin/doctors")
+async def get_all_doctors():
+    """Get all doctors with filtering options"""
+    try:
+        doctors = []
+        async for doctor in mongodb_service.db.users.find({"role": "doctor"}):
+            doctors.append({
+                "id": str(doctor["_id"]),
+                "name": doctor.get("name", ""),
+                "email": doctor.get("email", ""),
+                "specialization": doctor.get("specialization", "General"),
+                "created_at": doctor.get("created_at", ""),
+                "force_password_change": doctor.get("force_password_change", False)
+            })
+        
+        return {"doctors": doctors}
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch doctors: {str(e)}"
+        )
