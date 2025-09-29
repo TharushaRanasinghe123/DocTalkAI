@@ -16,7 +16,10 @@ import {
   RefreshCw,
   Search,
   Edit3,
-  Trash2
+  Trash2,
+  Mail,
+  Phone,
+  Clock
 } from 'lucide-react';
 
 const AdminDashboard = () => {
@@ -164,6 +167,7 @@ const AdminDashboard = () => {
     }
   };
 
+  // Loading state
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -179,6 +183,7 @@ const AdminDashboard = () => {
     <div className="min-h-screen bg-gray-50 flex">
       {/* Sidebar */}
       <div className="w-64 bg-white shadow-sm border-r border-gray-200">
+        {/* Logo */}
         <div className="p-6 border-b border-gray-200">
           <div className="flex items-center space-x-3">
             <div className="w-10 h-10 bg-purple-600 rounded-lg flex items-center justify-center">
@@ -193,6 +198,7 @@ const AdminDashboard = () => {
           </div>
         </div>
 
+        {/* Navigation */}
         <nav className="p-4 space-y-1">
           {sidebarItems.map((item) => {
             const Icon = item.icon;
@@ -213,6 +219,7 @@ const AdminDashboard = () => {
           })}
         </nav>
 
+        {/* Quick Stats in Sidebar */}
         <div className="p-4 mt-8">
           <h3 className="text-sm font-semibold text-gray-900 mb-3">Quick Stats</h3>
           <div className="space-y-3">
@@ -233,6 +240,7 @@ const AdminDashboard = () => {
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col">
+        {/* Header */}
         <header className="bg-white border-b border-gray-200 px-6 py-4">
           <div className="flex items-center justify-between">
             <div>
@@ -268,6 +276,7 @@ const AdminDashboard = () => {
           </div>
         </header>
 
+        {/* Stats Cards */}
         <div className="px-6 py-6">
           <div className="grid grid-cols-4 gap-6 mb-8">
             <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
@@ -319,6 +328,7 @@ const AdminDashboard = () => {
             </div>
           </div>
 
+          {/* Tab Navigation */}
           <div className="bg-white rounded-t-xl border-b border-gray-200">
             <div className="flex space-x-8 px-6">
               {[
@@ -347,6 +357,7 @@ const AdminDashboard = () => {
             </div>
           </div>
 
+          {/* Content Area */}
           <div className="bg-white rounded-b-xl shadow-sm border-l border-r border-b border-gray-200 p-6" style={{ height: 'calc(100vh - 380px)', overflowY: 'auto' }}>
             {renderContent()}
           </div>
@@ -515,6 +526,7 @@ const DoctorsTab = ({ showAddDoctor, setShowAddDoctor, newDoctor, setNewDoctor, 
         </button>
       </div>
 
+      {/* Add Doctor Form */}
       {showAddDoctor && (
         <div className="bg-gray-50 rounded-lg p-6 mb-6 border border-gray-200">
           <h3 className="text-lg font-semibold mb-4 text-gray-900">Add New Doctor</h3>
@@ -720,27 +732,481 @@ const DoctorsTab = ({ showAddDoctor, setShowAddDoctor, newDoctor, setNewDoctor, 
 };
 
 const PatientsTab = () => {
+  const [patients, setPatients] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [selectedPatient, setSelectedPatient] = useState(null);
+  const [patientAppointments, setPatientAppointments] = useState([]);
+  const [showAppointments, setShowAppointments] = useState(false);
+
+  const fetchPatients = async () => {
+    try {
+      setLoading(true);
+      const token = localStorage.getItem('token');
+      
+      const response = await fetch('http://localhost:8001/api/v1/admin/patients', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setPatients(data.patients || []);
+      } else {
+        console.error('Failed to fetch patients');
+        setPatients([]);
+      }
+    } catch (error) {
+      console.error('Error fetching patients:', error);
+      setPatients([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchPatientAppointments = async (patientId) => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`http://localhost:8001/api/v1/admin/patients/${patientId}/appointments`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setPatientAppointments(data.appointments || []);
+        setSelectedPatient(data.patient);
+        setShowAppointments(true);
+      }
+    } catch (error) {
+      console.error('Error fetching patient appointments:', error);
+    }
+  };
+
+  useEffect(() => {
+    fetchPatients();
+  }, []);
+
+  const filteredPatients = patients.filter(patient => {
+    const matchesSearch = patient.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         patient.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         patient.phone?.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    const matchesStatus = statusFilter === 'all' || patient.status === statusFilter;
+    
+    return matchesSearch && matchesStatus;
+  });
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center py-12">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600"></div>
+      </div>
+    );
+  }
+
+  if (showAppointments && selectedPatient) {
+    return (
+      <div>
+        <div className="flex items-center space-x-2 mb-6">
+          <button 
+            onClick={() => setShowAppointments(false)}
+            className="text-purple-600 hover:text-purple-800"
+          >
+            ← Back to Patients
+          </button>
+          <h2 className="text-lg font-semibold text-gray-900">
+            Appointments for {selectedPatient.name}
+          </h2>
+        </div>
+
+        <div className="bg-white rounded-lg border border-gray-200">
+          <div className="p-6 border-b border-gray-200">
+            <h3 className="text-lg font-semibold mb-2">Patient Information</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="text-sm text-gray-600">Name</label>
+                <p className="font-medium">{selectedPatient.name}</p>
+              </div>
+              <div>
+                <label className="text-sm text-gray-600">Email</label>
+                <p className="font-medium">{selectedPatient.email}</p>
+              </div>
+              <div>
+                <label className="text-sm text-gray-600">Phone</label>
+                <p className="font-medium">{selectedPatient.phone || 'Not provided'}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-6">
+            <h3 className="text-lg font-semibold mb-4">Appointment History</h3>
+            {patientAppointments.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                <Calendar size={48} className="mx-auto mb-4 opacity-50" />
+                <p>No appointments found for this patient</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {patientAppointments.map(appointment => (
+                  <div key={appointment.id} className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <div className="flex items-center space-x-2 mb-2">
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                            appointment.status === 'booked' ? 'bg-green-100 text-green-800' :
+                            appointment.status === 'cancelled' ? 'bg-red-100 text-red-800' :
+                            'bg-gray-100 text-gray-800'
+                          }`}>
+                            {appointment.status?.charAt(0).toUpperCase() + appointment.status?.slice(1)}
+                          </span>
+                          <span className="text-sm text-gray-600">ID: {appointment.appointment_id}</span>
+                        </div>
+                        <p className="font-semibold">Dr. {appointment.doctor_name}</p>
+                        <p className="text-sm text-gray-600">
+                          {appointment.date} at {appointment.time}
+                        </p>
+                        {appointment.reason && (
+                          <p className="text-sm text-gray-600 mt-1">Reason: {appointment.reason}</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="text-center py-12">
-      <Users size={48} className="text-gray-400 mx-auto mb-4" />
-      <h2 className="text-xl font-semibold text-gray-900 mb-2">Patient Management</h2>
-      <p className="text-gray-600 mb-6">View and manage patient records and information</p>
-      <button className="bg-purple-600 text-white px-6 py-3 rounded-lg hover:bg-purple-700 transition-colors">
-        View All Patients
-      </button>
+    <div>
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center space-x-2">
+          <Users size={20} className="text-gray-600" />
+          <h2 className="text-lg font-semibold text-gray-900">Patient Management</h2>
+          <span className="bg-gray-100 text-gray-600 px-2 py-1 rounded-full text-sm">
+            {filteredPatients.length} patients
+          </span>
+        </div>
+      </div>
+
+      {/* Search and Filter Bar */}
+      <div className="bg-white rounded-lg p-4 mb-6 border border-gray-200">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="md:col-span-2">
+            <label className="block text-sm font-medium text-gray-700 mb-2">Search Patients</label>
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Search by name, email, or phone..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full px-4 py-2 pl-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              />
+              <div className="absolute left-3 top-2.5 text-gray-400">
+                <Search size={16} />
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+            >
+              <option value="all">All Status</option>
+              <option value="Active">Active</option>
+              <option value="Inactive">Inactive</option>
+            </select>
+          </div>
+        </div>
+
+        {(searchTerm || statusFilter !== 'all') && (
+          <div className="mt-3 flex justify-between items-center">
+            <span className="text-sm text-gray-600">
+              Showing {filteredPatients.length} of {patients.length} patients
+            </span>
+            <button
+              onClick={() => {
+                setSearchTerm('');
+                setStatusFilter('all');
+              }}
+              className="text-sm text-purple-600 hover:text-purple-800"
+            >
+              Clear all filters
+            </button>
+          </div>
+        )}
+      </div>
+
+      {filteredPatients.length === 0 ? (
+        <div className="text-center py-12 bg-white rounded-lg border border-gray-200">
+          <Users size={48} className="mx-auto mb-4 text-gray-400" />
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">No patients found</h3>
+          <p className="text-gray-600">
+            {patients.length === 0 ? "No patients have registered yet." : "No patients match your search criteria."}
+          </p>
+        </div>
+      ) : (
+        <div className="grid gap-4">
+          {filteredPatients.map(patient => (
+            <div key={patient.id} className="bg-white rounded-lg p-6 border border-gray-200 hover:shadow-md transition-shadow">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-4">
+                  <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
+                    <User size={20} className="text-green-600" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-900">{patient.name}</h3>
+                    <p className="text-sm text-gray-600">{patient.email}</p>
+                    <div className="flex items-center space-x-2 mt-1">
+                      <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs font-medium">
+                        {patient.appointment_count} appointments
+                      </span>
+                      <span className="bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs font-medium">
+                        {patient.status}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="flex items-center space-x-2">
+                  <button 
+                    onClick={() => fetchPatientAppointments(patient.id)}
+                    className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors text-sm"
+                  >
+                    View Appointments
+                  </button>
+                </div>
+              </div>
+              
+              <div className="mt-4 pt-4 border-t border-gray-100 text-sm text-gray-500">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="flex items-center space-x-2">
+                    <Phone size={14} />
+                    <span>{patient.phone || 'Not provided'}</span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Clock size={14} />
+                    <span>Joined: {new Date(patient.created_at).toLocaleDateString()}</span>
+                  </div>
+                  <div>
+                    <span className="font-medium">Last Appointment:</span> {patient.latest_appointment}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 };
 
 const AppointmentsTab = () => {
+  const [appointments, setAppointments] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [dateFilter, setDateFilter] = useState('');
+
+  const fetchAppointments = async () => {
+    try {
+      setLoading(true);
+      const token = localStorage.getItem('token');
+      
+      const response = await fetch('http://localhost:8001/api/v1/admin/appointments', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setAppointments(data.appointments || []);
+      } else {
+        console.error('Failed to fetch appointments');
+        setAppointments([]);
+      }
+    } catch (error) {
+      console.error('Error fetching appointments:', error);
+      setAppointments([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchAppointments();
+  }, []);
+
+  const filteredAppointments = appointments.filter(appointment => {
+    const matchesSearch = appointment.patient_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         appointment.doctor_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         appointment.appointment_id.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    const matchesStatus = statusFilter === 'all' || appointment.status === statusFilter;
+    
+    const matchesDate = !dateFilter || appointment.date === dateFilter;
+    
+    return matchesSearch && matchesStatus && matchesDate;
+  });
+
+  const statusColors = {
+    booked: 'bg-green-100 text-green-800',
+    scheduled: 'bg-blue-100 text-blue-800',
+    cancelled: 'bg-red-100 text-red-800',
+    completed: 'bg-gray-100 text-gray-800'
+  };
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center py-12">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600"></div>
+      </div>
+    );
+  }
+
   return (
-    <div className="text-center py-12">
-      <Calendar size={48} className="text-gray-400 mx-auto mb-4" />
-      <h2 className="text-xl font-semibold text-gray-900 mb-2">Appointment Management</h2>
-      <p className="text-gray-600 mb-6">Monitor and manage system-wide appointments</p>
-      <button className="bg-purple-600 text-white px-6 py-3 rounded-lg hover:bg-purple-700 transition-colors">
-        View All Appointments
-      </button>
+    <div>
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center space-x-2">
+          <Calendar size={20} className="text-gray-600" />
+          <h2 className="text-lg font-semibold text-gray-900">Appointment Management</h2>
+          <span className="bg-gray-100 text-gray-600 px-2 py-1 rounded-full text-sm">
+            {filteredAppointments.length} appointments
+          </span>
+        </div>
+        <button 
+          onClick={fetchAppointments}
+          className="flex items-center space-x-2 text-gray-600 hover:text-gray-900"
+        >
+          <RefreshCw size={16} />
+          <span>Refresh</span>
+        </button>
+      </div>
+
+      {/* Search and Filter Bar */}
+      <div className="bg-white rounded-lg p-4 mb-6 border border-gray-200">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="md:col-span-2">
+            <label className="block text-sm font-medium text-gray-700 mb-2">Search Appointments</label>
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Search by patient, doctor, or appointment ID..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full px-4 py-2 pl-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              />
+              <div className="absolute left-3 top-2.5 text-gray-400">
+                <Search size={16} />
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+            >
+              <option value="all">All Status</option>
+              <option value="booked">Booked</option>
+              <option value="scheduled">Scheduled</option>
+              <option value="cancelled">Cancelled</option>
+              <option value="completed">Completed</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Date</label>
+            <input
+              type="date"
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+            />
+          </div>
+        </div>
+
+        {(searchTerm || statusFilter !== 'all' || dateFilter) && (
+          <div className="mt-3 flex justify-between items-center">
+            <span className="text-sm text-gray-600">
+              Showing {filteredAppointments.length} of {appointments.length} appointments
+            </span>
+            <button
+              onClick={() => {
+                setSearchTerm('');
+                setStatusFilter('all');
+                setDateFilter('');
+              }}
+              className="text-sm text-purple-600 hover:text-purple-800"
+            >
+              Clear all filters
+            </button>
+          </div>
+        )}
+      </div>
+
+      {filteredAppointments.length === 0 ? (
+        <div className="text-center py-12 bg-white rounded-lg border border-gray-200">
+          <Calendar size={48} className="mx-auto mb-4 text-gray-400" />
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">No appointments found</h3>
+          <p className="text-gray-600">
+            {appointments.length === 0 ? "No appointments have been scheduled yet." : "No appointments match your search criteria."}
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {filteredAppointments.map(appointment => (
+            <div key={appointment.id} className="bg-white rounded-lg p-6 border border-gray-200 hover:shadow-md transition-shadow">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <div className="flex items-center space-x-2 mb-2">
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                      statusColors[appointment.status] || 'bg-gray-100 text-gray-800'
+                    }`}>
+                      {appointment.status?.charAt(0).toUpperCase() + appointment.status?.slice(1)}
+                    </span>
+                    <span className="text-sm text-gray-600">ID: {appointment.appointment_id}</span>
+                  </div>
+                  <h3 className="font-semibold text-lg">{appointment.patient_name}</h3>
+                  <p className="text-gray-600">with Dr. {appointment.doctor_name}</p>
+                </div>
+                <div className="text-right">
+                  <p className="font-semibold text-lg">{appointment.date}</p>
+                  <p className="text-gray-600">{appointment.time}</p>
+                </div>
+              </div>
+              
+              {appointment.reason && (
+                <p className="text-gray-600 mb-4">Reason: {appointment.reason}</p>
+              )}
+              
+              <div className="flex justify-between items-center text-sm text-gray-500">
+                <span>Created: {new Date(appointment.created_at).toLocaleDateString()}</span>
+                <div className="flex space-x-2">
+                  <button className="text-blue-600 hover:text-blue-800">Reschedule</button>
+                  <button className="text-red-600 hover:text-red-800">Cancel</button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 };
